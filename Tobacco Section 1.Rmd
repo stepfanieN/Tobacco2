@@ -1,0 +1,214 @@
+---
+title: "Tobacco Survey"
+author: ""
+date: "2025-08-24"
+output: html_document
+---
+
+```{r library}
+library(tidyverse)
+library(readr)
+library(readxl)
+library(dplyr)
+library(survey)
+```
+
+```{r Install packages}
+
+```
+
+```{r survey format}
+
+```
+
+
+```{r File Import}
+HH_Data1 <- read_excel("C:/Users/Surface/Desktop/HH_Data1.xlsx")
+Indivi_Data1 <- read_excel("C:/Users/Surface/Desktop/Stepfanie Data Folder-20250824T110934Z-1-001/Stepfanie Data Folder/Individual .xlsx")
+Weights <- read_excel ("C:/Users/Surface/Desktop/Stepfanie Data Folder-20250824T110934Z-1-001/Stepfanie Data Folder/Weights.xlsx")
+#Without <15 years old
+HH_Data_15 <- HH_Data2[HH_Data2$indi_age >= 15, ]
+
+```
+
+```{r Location Variable}
+HH_Data2 <- HH_Data1 %>%
+  mutate(provinceL = case_when(
+    between(location, 9000, 9199) ~ "Southern",
+    between(location, 4000, 4199) ~ "Luapula",
+    TRUE ~ "Other"
+  ))
+table(HH_Data2$provinceL)
+```
+
+```{r Data Variables}
+#Age groups (A: overall)
+HH_Data2$indi_age
+HH_Data2$indi_age[HH_Data2$indi_age == 335] <- NA
+HH_Data2$indi_age[HH_Data2$indi_age == 999] <- NA
+summary(HH_Data2$indi_age)
+
+#Age groups (B: overall >15 yrs)
+HH_Data_15$indi_age
+HH_Data_15$indi_age[HH_Data_15$indi_age == 335] <- NA
+HH_Data_15$indi_age[HH_Data_15$indi_age == 999] <- NA
+summary(HH_Data_15$indi_age)
+
+#Age groups (C: Five year age group)
+HH_Data_15$age_group <- cut(
+  HH_Data_15$indi_age,
+  breaks = seq(15, max(HH_Data_15$indi_age, na.rm = TRUE) + 5, by = 5),
+  right = FALSE,
+  labels = paste(
+    seq(15, max(HH_Data_15$indi_age, na.rm = TRUE), by = 5),
+    seq(19, max(HH_Data_15$indi_age, na.rm = TRUE) + 4, by = 5),
+    sep = "-"
+  )
+)
+
+table(HH_Data_15$age_group, HH_Data_15$provinceL)
+```
+###Missing age data
+ZAM90690610320011 - 335
+ZAM90590510230301 - 999
+Missing (Na) - 18
+
+```{r}
+install.packages("survey")
+library(survey)
+
+# Defining the Survey Design
+design_ind <- svydesign(
+  ids = ~EA,                   
+  weights = ~Individualweight,
+  data = indv_scps)
+indv_scps$t201
+```
+
+
+```{r}
+design_house <- svydesign(
+  ids = ~EA,                   
+  weights = ~Individualweight,
+  data = indv_scps)
+indv_scps$t201
+```
+
+```{r Table 1b}
+library(gtsummary)
+library(dplyr)
+library(gt)
+
+# Example dataset (replace with your own)
+df <- tibble::tribble(
+  ~Province, ~Residence, ~Sex,
+  "Province A", "Urban", "Male",
+  "Province A", "Urban", "Female",
+  "Province A", "Rural", "Male",
+  "Province B", "Urban", "Female",
+  "Province B", "Rural", "Male",
+  "Province B", "Rural", "Female"
+) %>%
+  slice(rep(1:n(), c(630, 320, 291, 1055, 341, 568)))  # fake frequencies
+
+# Example weights (replace with survey weights if you have them)
+df$wt <- runif(nrow(df), 0.8, 1.2)
+
+# --- gtsummary template ---
+tbl <-
+  df %>%
+  tbl_strata(
+    strata = Province,                # side-by-side provinces
+    .tbl_fun = ~ .x %>%
+      tbl_summary(
+        by = NULL,                     # no "by" column, just describe
+        statistic = list(
+          all_categorical() ~ "{p}% ({n_unweighted}/{n})"
+        ),
+        label = list(
+          Residence ~ "Residence",
+          Sex ~ "Sex"
+        ),
+        missing = "no"
+      ),
+    .header = "{strata}"              # column headers: Province A, Province B
+  ) %>%
+  modify_header(all_stat_cols() ~ "**{label}**") %>%
+  as_gt() %>%
+  tab_spanner(
+    label = "Province A",
+    columns = matches("Province A")
+  ) %>%
+  tab_spanner(
+    label = "Province B",
+    columns = matches("Province B")
+  )
+
+
+
+```
+
+
+```{r table2}
+library(gt)
+library(dplyr)
+library(tidyr)
+
+# Example dataset with unweighted/weighted percentages
+df <- tibble::tribble(
+  ~Characteristics, ~Province, ~Percent_Unw, ~Percent_W, ~UnweightedN, ~WeightedN,
+  "Overall", "Province A", 31.1, 49.1, 630, 3830,
+  "Overall", "Province B", 68.9, 50.9, 1396, 3969,
+  "Residence: Urban", "Province A", 81.0, 80.6, 510, 3089,
+  "Residence: Urban", "Province B", 75.6, 75.0, 1055, 2978,
+  "Residence: Rural", "Province A", 19.0, 19.4, 120, 742,
+  "Residence: Rural", "Province B", 24.4, 25.0, 341, 991,
+  "Sex: Male", "Province A", 47.6, 45.5, 291, 1681,
+  "Sex: Male", "Province B", 53.7, 53.4, 659, 1862,
+  "Sex: Female", "Province A", 52.4, 54.5, 320, 2014,
+  "Sex: Female", "Province B", 46.3, 46.6, 568, 1625
+)
+
+# Create percentage column in "x / y" format
+df <- df %>%
+  mutate(Percent = paste0(Percent_Unw, "/", Percent_W)) %>%
+  select(Characteristics, Province, Percent, UnweightedN, WeightedN)
+
+# Pivot wider (names will look like "Province A_Percent", etc.)
+df_wide <- df %>%
+  # Remove spaces from Province labels
+  mutate(Province = gsub(" ", "", Province)) %>%
+  pivot_wider(
+    names_from = Province,
+    values_from = c(Percent, UnweightedN, WeightedN),
+    names_glue = "{Province}_{.value}"
+  )
+
+# Build GT table
+gt_table <- df_wide %>%
+  gt(rowname_col = "Characteristics") %>%
+  tab_header(
+    title = "Summary Table by Province"
+  ) %>%
+  tab_spanner(
+    label = "Province A",
+    columns = c(ProvinceA_Percent, ProvinceA_UnweightedN, ProvinceA_WeightedN)
+  ) %>%
+  tab_spanner(
+    label = "Province B",
+    columns = c(ProvinceB_Percent, ProvinceB_UnweightedN, ProvinceB_WeightedN)
+  ) %>%
+  cols_label(
+    ProvinceA_Percent = "%",
+    ProvinceA_UnweightedN = "Unweighted(N)",
+    ProvinceA_WeightedN = "Weighted(N)",
+    ProvinceB_Percent = "%",
+    ProvinceB_UnweightedN = "Unweighted(N)",
+    ProvinceB_WeightedN = "Weighted(N)"
+  )
+
+gt_table
+
+
+
+```
